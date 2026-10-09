@@ -127,3 +127,44 @@ describe("Legacy IPC handlers preserved", () => {
     });
   }
 });
+
+// ─── Remote safety ──────────────────────────────────────
+
+/** Source of one `ipcMain.handle("<channel>", ...)` registration. */
+function handlerSource(channel: string): string {
+  const start = indexSrc.indexOf(`"${channel}"`);
+  expect(start, `handler ${channel} not found`).toBeGreaterThan(-1);
+  const next = indexSrc.indexOf("ipcMain.handle(", start);
+  return indexSrc.slice(start, next === -1 ? undefined : next);
+}
+
+describe("Remote mode never falls through to local files", () => {
+  // These handlers write the LOCAL ~/.hermes while the Memory screen shows the
+  // server. Each must branch on remote mode before touching local state.
+  const writers = [
+    "add-memory-entry",
+    "update-memory-entry",
+    "remove-memory-entry",
+    "write-user-profile",
+    "set-config",
+  ];
+  for (const channel of writers) {
+    it(`${channel} has an explicit remote branch`, () => {
+      expect(handlerSource(channel)).toMatch(/mode === "remote"/);
+    });
+  }
+
+  it("registry-install refuses in remote instead of installing locally", () => {
+    expect(handlerSource("registry-install")).toMatch(
+      /remote[\s\S]*remoteInstallRegistryItem/,
+    );
+  });
+
+  it("start-gateway never spawns a local gateway in remote mode", () => {
+    const src = handlerSource("start-gateway");
+    expect(src.indexOf('mode === "remote"')).toBeGreaterThan(-1);
+    expect(src.indexOf('mode === "remote"')).toBeLessThan(
+      src.indexOf("startGatewayDetailed()"),
+    );
+  });
+});
