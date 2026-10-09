@@ -14,6 +14,10 @@ Cron jobs prefer the dashboard `/api/cron/jobs` and fall back to the gateway `/a
 
 An HTML 200 from `/health` is the dashboard SPA, not a gateway, and is never treated as a healthy api_server.
 
+Each card has a run-history toggle ([[src/main/cronjobs.ts#listCronRuns]], [[src/main/cronjobs.ts#getCronRunOutput]]). Remote lists `/api/cron/jobs/{id}/runs` and reads an agent run's text from its `cron_*` session.
+
+Script-only runs have no endpoint for the saved file, so only the run's preview is shown and the UI says so. SSH mode reports the history as unsupported.
+
 ## Skills
 
 Skills list, content, install and uninstall use `/api/skills*` through [[src/main/remote-skills.ts]]. Install and uninstall spawn a CLI on the server, so success means "started".
