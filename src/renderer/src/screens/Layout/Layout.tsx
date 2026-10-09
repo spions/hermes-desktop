@@ -1000,11 +1000,7 @@ function Layout({
 
           {visitedViews.has("kanban") && (
             <div style={paneStyle("kanban")}>
-              {remoteMode ? (
-                <RemoteNotice feature="Kanban" />
-              ) : (
-                <Kanban profile={activeProfile} visible={view === "kanban"} />
-              )}
+              <Kanban profile={activeProfile} visible={view === "kanban"} />
             </div>
           )}
 
