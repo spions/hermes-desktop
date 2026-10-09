@@ -36,6 +36,8 @@ The Agents screen lists and creates profiles with `/api/profiles` ([[src/main/re
 
 Memory is read-only remotely ([[src/main/remote-memory.ts]]). The dashboard has no content API for `MEMORY.md` and `USER.md`, so they are read through `/api/fs/read-text`, and every memory write handler refuses instead of falling through to local files.
 
+A locked dashboard answers that read with 403 (outside the managed read boundary). Then the screen shows only the file sizes and providers from `/api/memory` and says the contents are not exposed, instead of failing.
+
 `SOUL.md` has a first-class API (`/api/profiles/{name}/soul`) and is read and written there; reset is not offered remotely.
 
 ## Kanban
