@@ -251,6 +251,7 @@ import {
   emptyOAuthProviderStatuses,
   remoteGetOAuthProviderStatuses,
 } from "../remote-provider-statuses";
+import { remoteCreateProfile, remoteListProfiles } from "../remote-profiles";
 import {
   remoteAddCredentialPoolEntry,
   remoteGetCredentialPool,
@@ -2450,6 +2451,9 @@ export function registerIpcHandlers(context: IpcContext): void {
         isActive: p.name === active,
       }));
     }
+    if (conn.mode === "remote") {
+      return remoteListProfiles(getActiveProfileNameSync());
+    }
     return listProfiles();
   });
   ipcMain.handle(
@@ -2458,6 +2462,7 @@ export function registerIpcHandlers(context: IpcContext): void {
       const conn = getConnectionConfig();
       if (conn.mode === "ssh" && conn.ssh)
         return sshCreateProfile(conn.ssh, name, cloneFrom);
+      if (conn.mode === "remote") return remoteCreateProfile(name, cloneFrom);
       return createProfile(name, cloneFrom);
     },
   );
