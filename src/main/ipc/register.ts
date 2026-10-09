@@ -252,6 +252,8 @@ import {
   remoteGetOAuthProviderStatuses,
 } from "../remote-provider-statuses";
 import { remoteCreateProfile, remoteListProfiles } from "../remote-profiles";
+import { remoteGetSessionUsage } from "../remote-session-usage";
+import { remoteGetModelContextWindow } from "../remote-model-info";
 import {
   remoteInstallRegistryItem,
   remoteListInstalledRegistry,
@@ -1998,6 +2000,16 @@ export function registerIpcHandlers(context: IpcContext): void {
       baseUrl: string | undefined,
       profile?: string,
     ) => {
+      const conn = getConnectionConfig();
+      // Remote: the server's agent decides the window; the local config and
+      // provider key describe a different machine.
+      if (conn.mode === "remote") {
+        return remoteGetModelContextWindow(
+          conn,
+          model,
+          activeSshProfile(profile),
+        );
+      }
       return getModelContextWindow(
         provider,
         model,
@@ -2309,6 +2321,16 @@ export function registerIpcHandlers(context: IpcContext): void {
     },
   );
 
+  // Server-side token/cost totals of one session. Remote only: a local chat
+  // gets live usage events, and the totals are not stored in a form we read.
+  ipcMain.handle(
+    "get-session-usage",
+    (_event, sessionId: string, connectionId?: string, profile?: string) => {
+      const conn = sessionConnection(connectionId);
+      if (conn.mode !== "remote") return null;
+      return remoteGetSessionUsage(conn, sessionId, activeSshProfile(profile));
+    },
+  );
   ipcMain.handle(
     "get-session-messages",
     (_event, sessionId: string, connectionId?: string, profile?: string) => {
