@@ -253,6 +253,10 @@ import {
 } from "../remote-provider-statuses";
 import { remoteCreateProfile, remoteListProfiles } from "../remote-profiles";
 import {
+  remoteInstallRegistryItem,
+  remoteListInstalledRegistry,
+} from "../remote-discover";
+import {
   REMOTE_MEMORY_READ_ONLY_ERROR,
   remoteActiveMemoryProvider,
   remoteDiscoverMemoryProviders,
@@ -3463,7 +3467,9 @@ export function registerIpcHandlers(context: IpcContext): void {
     fetchModelRegistry(!!force),
   );
   ipcMain.handle("registry-list-installed", (_event, profile?: string) =>
-    listInstalledRegistry(profile),
+    getConnectionConfig().mode === "remote"
+      ? remoteListInstalledRegistry(profile)
+      : listInstalledRegistry(profile),
   );
   ipcMain.handle(
     "registry-detail",
@@ -3473,7 +3479,9 @@ export function registerIpcHandlers(context: IpcContext): void {
   ipcMain.handle(
     "registry-install",
     (_event, kind: RegistryKind, item: RegistryItem, profile?: string) =>
-      installRegistryItem(kind, item, profile),
+      getConnectionConfig().mode === "remote"
+        ? remoteInstallRegistryItem()
+        : installRegistryItem(kind, item, profile),
   );
 
   // Memory providers
