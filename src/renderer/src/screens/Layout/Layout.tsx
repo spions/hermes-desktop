@@ -18,6 +18,7 @@ import {
 } from "./chatRuns";
 import { ActiveSessionsBar } from "./ActiveSessionsBar";
 import { StatusBar } from "./StatusBar";
+import type { SessionUsage } from "./sessionUsage";
 import Sessions from "../Sessions/Sessions";
 import Agents from "../Agents/Agents";
 import Discover from "../Discover/Discover";
@@ -252,6 +253,12 @@ function Layout({
   const handleRunTitle = useCallback((runId: string, title: string) => {
     setRuns((prev) => patchRun(prev, runId, { title }));
   }, []);
+  const handleRunUsage = useCallback(
+    (runId: string, usage: SessionUsage | null) => {
+      setRuns((prev) => patchRun(prev, runId, { usage }));
+    },
+    [],
+  );
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try {
       return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true";
@@ -895,6 +902,7 @@ function Layout({
                   onLoadingChange={handleRunLoading}
                   onSessionIdChange={handleRunSessionId}
                   onTitleChange={handleRunTitle}
+                  onUsageChange={handleRunUsage}
                   agentAppearance={getAppearance(run.profile)}
                 />
               </div>
@@ -1035,7 +1043,14 @@ function Layout({
           )}
         </main>
       </div>
-      <StatusBar activeProfile={activeProfile} />
+      <StatusBar
+        activeProfile={activeProfile}
+        sessionUsage={
+          view === "chat"
+            ? (runs.find((r) => r.runId === activeRunId)?.usage ?? null)
+            : null
+        }
+      />
     </div>
   );
 }
