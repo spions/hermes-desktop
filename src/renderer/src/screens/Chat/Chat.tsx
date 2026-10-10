@@ -24,6 +24,7 @@ import { useLocalCommands } from "./hooks/useLocalCommands";
 import {
   dashboardChatEnabledForConnection,
   useDashboardChatTransport,
+  estimateTranscriptTokens,
 } from "./hooks/useDashboardChatTransport";
 import { useI18n } from "../../components/useI18n";
 import { useChatPreferences } from "../../components/ChatPreferencesProvider";
@@ -41,6 +42,11 @@ import type {
   UsageState,
 } from "./types";
 import type { ContextUsage } from "./ContextGauge";
+import {
+  combineUsageTotals,
+  type SessionUsage,
+  type UsageCounters,
+} from "../Layout/sessionUsage";
 import { contextWindowForModel } from "./contextWindows";
 import { QueuedMessages } from "./QueuedMessages";
 import { SLASH_COMMANDS, type SlashCommand } from "./slashCommands";
@@ -118,6 +124,9 @@ interface ChatProps {
   onSessionIdChange?: (runId: string, sessionId: string | null) => void;
   /** Reports the first user message as a best-effort conversation title. */
   onTitleChange?: (runId: string, title: string) => void;
+  /** Reports token usage (context occupancy + session totals) so the shell's
+   *  status bar can show it for the active run. */
+  onUsageChange?: (runId: string, usage: SessionUsage | null) => void;
   /** Resolved avatar/colour of `profile`, so idle agent avatars in the
    *  transcript show the agent's profile picture instead of the loading gif. */
   agentAppearance?: { color?: string | null; avatar?: string | null };
@@ -136,6 +145,7 @@ function Chat({
   onLoadingChange,
   onSessionIdChange,
   onTitleChange,
+  onUsageChange,
   agentAppearance,
 }: ChatProps): React.JSX.Element {
   const { t } = useI18n();
@@ -1002,17 +1012,127 @@ function Chat({
   // Context-gauge data: the latest turn's prompt tokens vs the model's window.
   // Denominator priority: gateway-reported context_max (authoritative — knows
   // the actual model config) > provider /models catalogue > static heuristic.
+  // Before any live turn has reported usage (a conversation opened from
+  // history, or one still on its first turn) fall back to a transcript
+  // estimate so the occupancy is visible straight away.
+  const estimatedContext = useMemo(
+    () => (usage?.contextTokens ? 0 : estimateTranscriptTokens(messages)),
+    [usage?.contextTokens, messages],
+  );
+  const contextWindow =
+    usage?.contextWindowTokens ??
+    realContextWindow ??
+    contextWindowForModel(chatCurrentModel);
+  // The count is a guess when nothing live reported it, and also when the turn
+  // that set it fell back to the transcript estimate (usage.contextEstimated).
+  const contextEstimated = usage?.contextTokens
+    ? Boolean(usage.contextEstimated)
+    : estimatedContext > 0;
   const contextUsage: ContextUsage | null = usage?.contextTokens
     ? {
         used: usage.contextTokens,
-        window:
-          usage.contextWindowTokens ??
-          realContextWindow ??
-          contextWindowForModel(chatCurrentModel),
+        window: contextWindow,
         cacheReadTokens: usage.cacheReadTokens,
         cacheWriteTokens: usage.cacheWriteTokens,
+        estimated: contextEstimated,
       }
-    : null;
+    : estimatedContext > 0
+      ? { used: estimatedContext, window: contextWindow, estimated: true }
+      : null;
+
+  // A conversation opened from history has no live usage events, so read the
+  // totals the server has recorded for the session. They are kept SEPARATE from
+  // the live additions and combined below: seeding `usage` itself would be
+  // skipped whenever a live reply happened to finish first.
+  //
+  // `liveBase` is the live total at the moment the reply arrived. Anything the
+  // live counters held by then is assumed to be in the server's record already
+  // (a finished turn is persisted before it completes), so only what is added
+  // AFTER that point is counted on top: no turn is counted twice.
+  const [savedUsage, setSavedUsage] = useState<{
+    totals: NonNullable<
+      Awaited<ReturnType<typeof window.hermesAPI.getSessionUsage>>
+    >;
+    liveBase: UsageCounters;
+  } | null>(null);
+  const liveUsageRef = useRef(usage);
+  liveUsageRef.current = usage;
+  useEffect(() => {
+    setSavedUsage(null);
+    if (!hermesSessionId) return;
+    let cancelled = false;
+    window.hermesAPI
+      .getSessionUsage(hermesSessionId, connectionId, profile)
+      .then((totals) => {
+        if (cancelled || !totals) return;
+        const live = liveUsageRef.current;
+        setSavedUsage({
+          totals,
+          liveBase: {
+            promptTokens: live?.promptTokens ?? 0,
+            completionTokens: live?.completionTokens ?? 0,
+            totalTokens: live?.totalTokens ?? 0,
+            cost: live?.cost,
+          },
+        });
+      })
+      .catch(() => {
+        /* usage is informational; ignore */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hermesSessionId, connectionId, profile]);
+
+  // Surface usage upward for the status bar. Depend on primitives (not the
+  // freshly-built contextUsage object) so this only fires when a number moves.
+  const combined = combineUsageTotals(
+    savedUsage?.totals,
+    savedUsage?.liveBase,
+    usage,
+  );
+  const usagePrompt = combined.promptTokens;
+  const usageCompletion = combined.completionTokens;
+  const usageTotal = combined.totalTokens;
+  const usageCost = combined.cost;
+  const saved = savedUsage?.totals;
+  const usageCacheRead = usage?.cacheReadTokens ?? saved?.cacheReadTokens;
+  const usageCacheWrite = usage?.cacheWriteTokens ?? saved?.cacheWriteTokens;
+  const usageContext = contextUsage?.used ?? 0;
+  const usageWindow = contextUsage?.window ?? 0;
+  const hasUsage =
+    usage !== null || savedUsage !== null || contextUsage !== null;
+  useEffect(() => {
+    if (!onUsageChange) return;
+    if (!hasUsage) {
+      onUsageChange(runId, null);
+      return;
+    }
+    onUsageChange(runId, {
+      contextTokens: usageContext,
+      contextWindow: usageWindow,
+      promptTokens: usagePrompt,
+      completionTokens: usageCompletion,
+      totalTokens: usageTotal,
+      cost: usageCost,
+      cacheReadTokens: usageCacheRead,
+      cacheWriteTokens: usageCacheWrite,
+      ...(contextEstimated ? { estimated: true } : {}),
+    });
+  }, [
+    contextEstimated,
+    runId,
+    onUsageChange,
+    hasUsage,
+    usageContext,
+    usageWindow,
+    usagePrompt,
+    usageCompletion,
+    usageTotal,
+    usageCost,
+    usageCacheRead,
+    usageCacheWrite,
+  ]);
 
   const handleInspectElement = useCallback(
     (payload: { selector: string; comment: string }) => {
