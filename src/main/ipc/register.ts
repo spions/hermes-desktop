@@ -253,6 +253,14 @@ import {
   remoteUpdateModel,
 } from "../remote-models";
 import {
+  discoverModelsRemote,
+  remoteAddCredentialPoolEntry,
+  remoteGetCredentialPool,
+  remoteGetEnv,
+  remoteSetCredentialPool,
+  remoteSetEnv,
+} from "../remote-providers";
+import {
   emptyOAuthProviderStatuses,
   remoteGetOAuthProviderStatuses,
 } from "../remote-provider-statuses";
@@ -1048,6 +1056,7 @@ export function registerIpcHandlers(context: IpcContext): void {
   ipcMain.handle("get-env", (_event, profile?: string) => {
     const conn = getConnectionConfig();
     if (conn.mode === "ssh" && conn.ssh) return sshReadEnv(conn.ssh, profile);
+    if (conn.mode === "remote") return remoteGetEnv(profile);
     return readEnv(profile);
   });
 
@@ -1106,6 +1115,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         await sshSetEnvValue(conn.ssh, key, value, profile);
         return true;
       }
+      if (conn.mode === "remote") return remoteSetEnv(key, value, profile);
       setEnvValue(key, value, profile);
       // Restart gateway so it picks up the new API key.
       // The earlier condition had a precedence bug —
@@ -2036,6 +2046,11 @@ export function registerIpcHandlers(context: IpcContext): void {
       apiKey: string | undefined,
       profile?: string,
     ) => {
+      if (getConnectionConfig().mode === "remote") {
+        return discoverModelsRemote(apiKey, (key) =>
+          discoverProviderModels(provider, baseUrl, key, profile),
+        );
+      }
       return discoverProviderModels(provider, baseUrl, apiKey, profile);
     },
   );
@@ -2938,7 +2953,9 @@ export function registerIpcHandlers(context: IpcContext): void {
   // auth.json (see config.ts:authFilePath), so the renderer can pass an
   // explicit profile or rely on the active-profile fallback.
   ipcMain.handle("get-credential-pool", (_event, profile?: string) =>
-    getCredentialPool(profile),
+    getConnectionConfig().mode === "remote"
+      ? remoteGetCredentialPool(profile)
+      : getCredentialPool(profile),
   );
   ipcMain.handle(
     "set-credential-pool",
@@ -2948,6 +2965,9 @@ export function registerIpcHandlers(context: IpcContext): void {
       entries: Array<Record<string, unknown>>,
       profile?: string,
     ) => {
+      if (getConnectionConfig().mode === "remote") {
+        return remoteSetCredentialPool(provider, entries, profile);
+      }
       setCredentialPool(provider, entries, profile);
       return true;
     },
@@ -2966,6 +2986,9 @@ export function registerIpcHandlers(context: IpcContext): void {
       label: string,
       profile?: string,
     ) => {
+      if (getConnectionConfig().mode === "remote") {
+        return remoteAddCredentialPoolEntry(provider, apiKey, label, profile);
+      }
       return addCredentialPoolEntry(provider, apiKey, label, profile);
     },
   );
