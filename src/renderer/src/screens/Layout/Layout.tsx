@@ -945,6 +945,7 @@ function Layout({
           {visitedViews.has("agents") && (
             <div style={paneStyle("agents")}>
               <Agents
+                key={connectionId}
                 activeProfile={activeProfile}
                 onSelectProfile={handleSelectProfile}
                 onChatWith={handleChatWithProfile}
