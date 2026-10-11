@@ -10,7 +10,7 @@ A bare `fetch` has no OAuth cookie, so the dashboard answers 401. Several module
 
 ## Schedules
 
-Cron jobs prefer the dashboard `/api/cron/jobs` and fall back to the gateway `/api/jobs` only on 404 or 405, mapping `/trigger` to `/run`. See [[src/main/cronjobs.ts]].
+Cron jobs prefer the dashboard `/api/cron/jobs` and fall back to the gateway `/api/jobs` on 405, or on a per-job 404 only when the dashboard collection route is itself missing, mapping `/trigger` to `/run`. See [[src/main/cronjobs.ts]].
 
 An HTML 200 from `/health` is the dashboard SPA, not a gateway, and is never treated as a healthy api_server.
 

@@ -336,6 +336,12 @@ async function remoteFetchCron(
     init,
   );
   if (!isUnsupportedCronRoute(dashboardRes)) return dashboardRes;
+  // A 404 on a single job may be "job not found" from a working dashboard, not
+  // a missing route; only fall back when the dashboard collection is absent.
+  if (dashboardRes.status === 404 && jobPath !== "") {
+    const probe = await dashboardCronFetch(DASHBOARD_CRON_BASE, {});
+    if (!isUnsupportedCronRoute(probe)) return dashboardRes;
+  }
 
   // Gateway uses `/run` where the dashboard uses `/trigger`.
   const gatewayPath = jobPath.endsWith("/trigger")

@@ -1066,6 +1066,14 @@ export function clearAgentCapabilityEvidence(connectionId?: string): void {
 //  API Server health check
 // ────────────────────────────────────────────────────
 
+/** 200 and not the dashboard SPA's HTML page (which is not a gateway). */
+function isJsonHealthOk(res: http.IncomingMessage): boolean {
+  const contentType = String(res.headers?.["content-type"] || "");
+  return (
+    res.statusCode === 200 && !contentType.toLowerCase().includes("text/html")
+  );
+}
+
 function isApiServerReady(
   profile?: string,
   conn: ConnectionConfig = getConnectionConfig(),
@@ -1084,9 +1092,7 @@ function isApiServerReady(
         (res) => {
           // Dashboard SPA answers GET /health with HTML 200. That is NOT the
           // gateway api_server — treating it as ready causes POST /v1 → 405.
-          const contentType = String(res.headers?.["content-type"] || "");
-          const looksLikeHtml = contentType.toLowerCase().includes("text/html");
-          resolve(res.statusCode === 200 && !looksLikeHtml);
+          resolve(isJsonHealthOk(res));
           res.resume();
         },
       );
@@ -3596,15 +3602,9 @@ export function testRemoteConnection(
         target,
         { method: "GET", timeout: 5000, headers },
         (res) => {
-          if (path === "/health") {
-            const contentType = String(res.headers?.["content-type"] || "");
-            const looksLikeHtml = contentType
-              .toLowerCase()
-              .includes("text/html");
-            resolve(res.statusCode === 200 && !looksLikeHtml);
-          } else {
-            resolve(res.statusCode === 200);
-          }
+          resolve(
+            path === "/health" ? isJsonHealthOk(res) : res.statusCode === 200,
+          );
           res.resume();
         },
       );
