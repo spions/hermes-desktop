@@ -41,3 +41,6 @@ release/
 /*.bat
 /*.ps1
 .mcp.json
+
+# lat.md parse cache
+lat.md/.cache/parsed/
